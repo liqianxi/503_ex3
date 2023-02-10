@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package>
+  <name>augmented_reality_basics</name>
+  <version>1.0.0</version>
+  <description>TODO: description for `augmented_reality_basics` package.</description>
+
+  <maintainer email='qianxi@ualberta.ca'>liqianxi</maintainer>
+
+  <license>GPLv3</license>
+
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+</package>

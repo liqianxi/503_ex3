@@ -1,7 +1,7 @@
 # parameters
-ARG REPO_NAME="REPO_NAME_HERE"
+ARG REPO_NAME="503_ex3"
 ARG DESCRIPTION="DESCRIPTION_HERE"
-ARG MAINTAINER="YOUR_FULL_NAME (YOUR_EMAIL_ADDRESS)"
+ARG MAINTAINER="liqianxi (qianxi@ualberta.ca)"
 # pick an icon from: https://fontawesome.com/v4.7.0/icons/
 ARG ICON="cube"
 
