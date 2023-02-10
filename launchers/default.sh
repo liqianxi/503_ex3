@@ -7,7 +7,8 @@ dt-launchfile-init
 
 # YOUR CODE BELOW THIS LINE
 # ----------------------------------------------------------------------------
-dt-exec roslaunch augmented_reality_basics augmented_reality_basics.launch map_file:="intersection_4way.yaml" veh:=csc22945
+#dt-exec roslaunch augmented_reality_basics augmented_reality_basics.launch map_file:="intersection_4way.yaml" veh:=csc22945
+dt-exec roslaunch ex3_project ex3_project.launch veh:=csc22945
 
 
 # NOTE: Use the variable DT_REPO_PATH to know the absolute path to your code

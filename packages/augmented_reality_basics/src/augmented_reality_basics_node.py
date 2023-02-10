@@ -7,7 +7,8 @@ from duckietown.dtros import DTROS, NodeType, TopicType, DTParam, ParamType
 from sensor_msgs.msg import CompressedImage, CameraInfo
 from augmented_reality_basics import Augmenter
 from cv_bridge import CvBridge
-
+from duckietown_utils import load_homography, load_map
+import rospkg 
 # Code from https://github.com/Coral79/exA-3/blob/44adf94bad728507608086b91fbf5645fc22555f/packages/augmented_reality_basics/include/augmented_reality_basics/augmented_reality_basics.py
 
 class AugmentedRealityBasicsNode(DTROS):
@@ -17,6 +18,7 @@ class AugmentedRealityBasicsNode(DTROS):
         # Initialize the DTROS parent class
         super(AugmentedRealityBasicsNode, self).__init__(node_name=node_name, node_type=NodeType.PERCEPTION)
         self.veh = "csc22945"
+
         self.read_params_from_calibration_file()
         # Get parameters from config
         self._points = rospy.get_param(
@@ -52,7 +54,9 @@ class AugmentedRealityBasicsNode(DTROS):
 
 
     def get_extrinsic_filepath(self,name):
-        cali_file_folder = '/code/catkin_ws/src/503_ex3/packages/augmented_reality_basics/config/calibrations/camera_extrinsic/'
+        rospack = rospkg.RosPack()
+        cali_file_folder = rospack.get_path('augmented_reality_basics')+'/config/calibrations/camera_extrinsic/'
+        print(cali_file_folder)
         cali_file = cali_file_folder + name + ".yaml"
         return cali_file
 

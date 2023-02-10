@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package>
+  <name>ex3_project</name>
+  <version>1.0.0</version>
+  <description>ex3_project</description>
+
+  <maintainer email='qianxi@ualberta.ca'>liqianxi</maintainer>
+
+  <license>GPLv3</license>
+
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+</package>

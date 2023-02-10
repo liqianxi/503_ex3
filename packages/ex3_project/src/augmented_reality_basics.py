@@ -16,9 +16,14 @@ class Augmenter():
     def process_image(self, cv_image_raw):
         ''' Undistort an image.
         '''
-        newcameramtx, roi=cv2.getOptimalNewCameraMatrix(self.K,self.D,(self.w,self.h),0,(self.w,self.h)) # 自由比例参数
-        res = cv2.undistort(cv_image_raw, self.K, self.D, None, newcameramtx)       
-        #res = cv2.fisheye.undistortImage(cv_image_raw, self.K, self.D,self.R, self.K)
+        newcameramtx, roi=cv2.getOptimalNewCameraMatrix(self.K,self.D,(self.w,self.h),0,(self.w,self.h))
+        
+        # Undistort the image
+        res = cv2.undistort(cv_image_raw, self.K, self.D, None, newcameramtx)   
+
+        # Convert it to black and white (greyscale)    
+        res = cv2.cvtColor(res, cv2.COLOR_BGR2GRAY)
+
         return res
 
     def ground2pixel(self, point):
