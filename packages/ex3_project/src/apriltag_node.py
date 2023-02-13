@@ -248,7 +248,6 @@ class AprilTagNode(DTROS):
             
         else:
             for tag in tags:
-                print("decision_margin",tag.decision_margin)
                 if tag.decision_margin < 20:
                     continue
                 H = tag.homography # assume only 1 tag in image
