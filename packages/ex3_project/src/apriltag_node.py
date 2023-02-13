@@ -23,19 +23,19 @@ class AprilTagNode(DTROS):
         super(AprilTagNode, self).__init__(node_name=node_name, node_type=NodeType.PERCEPTION)
         self.veh = "csc22945"
         self.rospack = rospkg.RosPack()
-        print(self.rospack.get_path('ex3_project'))
+        #print(self.rospack.get_path('ex3_project'))
         self.read_params_from_calibration_file()
         # Get parameters from config
         self.camera_info_dict = self.load_intrinsics()
-        #print(self._segments)
+
         self.augmenter = Augmenter(self.homography,self.camera_info_msg)        
         # Subscribing 
         self.sub_image = rospy.Subscriber( f'/{self.veh}/camera_node/image/compressed',CompressedImage,self.project, queue_size=1)
         
-        # Publishersrospack
-        
+        # Publisher
         self.pub_result_ = rospy.Publisher(f'/{self.veh}/apriltag_node/modified/image/compressed', CompressedImage,queue_size=1)
 
+        # Keep this state so you don't need to reset the same color over and over again.
         self.current_led_pattern = 4
 
         # extract parameters from camera_info_dict for apriltag detection
@@ -61,38 +61,6 @@ class AprilTagNode(DTROS):
         rospy.wait_for_service(serve_name)
 
         self.emitter_service = rospy.ServiceProxy(serve_name, SetCustomLEDPattern,persistent=True)
-
-    def projection_matrix(self, K, H):
-        """
-            K is the intrinsic camera matrix
-            H is the homography matrix
-            Write here the compuatation for the projection matrix, namely the matrix
-            that maps the camera reference frame to the AprilTag reference frame.
-        """
-
-        # find R_1, R_2 and t
-        Kinv = np.linalg.inv(K)
-        r1r2t = np.matmul(Kinv, H) # r1r2t = [r_1 r_2 t]
-        r1r2t = r1r2t / np.linalg.norm(r1r2t[:, 0])
-        r_1 = r1r2t[:, 0]
-        r_2 = r1r2t[:, 1]
-        t = r1r2t[:, 2]
-
-        # Find v_3 vector othogonal to v_1 and v_2
-        r_3 = np.cross(r_1, r_2)
-
-        # Reconstruct R vector
-        R = np.column_stack((r_1, r_2, r_3))
-
-        # Use SVD to make R into an orthogonal matrix
-        _, U, Vt = cv2.SVDecomp(R)
-        R = U @ Vt
-
-        # Combine R, t and K to find P
-        buff = np.column_stack((R, t)) # buff = [r_1 r_2 r_3 t]
-        P = K @ buff
-
-        return P
 
     def color_pattern(self,mode):
         msg = LEDPattern()
@@ -120,7 +88,6 @@ class AprilTagNode(DTROS):
         return msg
 
     def change_led(self, tag_id):
-
         tag_id = int(tag_id)
         if tag_id in [63, 143, 58, 62, 133, 153]:
             # T-intersection
@@ -159,7 +126,6 @@ class AprilTagNode(DTROS):
 
     def add_text_to_img(self, tag_id, center, img):
         font                   = cv2.FONT_HERSHEY_SIMPLEX
-
         fontScale              = 0.5
         fontColor              = (255,255,255)
         thickness              = 1
@@ -192,18 +158,14 @@ class AprilTagNode(DTROS):
 
     def project(self, msg):
         br = CvBridge()
-
+        # Convert image to cv2 image.
         self.raw_image = br.compressed_imgmsg_to_cv2(msg)
+        # Convert to grey image and distort it.
         dis = self.augmenter.process_image(self.raw_image)
         tags = self.at_detector.detect(dis, estimate_tag_pose=False, camera_params=self.camera_params, tag_size=0.065) # returns list of detection objects
 
-
-        # Important:
-        # 133 and 153 are left and right T.
-        # 94, 93, 201,200 are u of a logos :use green color
-        # otherwise, use white color.
-
         """
+        A tag obj looks like:
         [Detection object:
             tag_family = b'tag36h11'
             tag_id = 133
@@ -242,27 +204,26 @@ class AprilTagNode(DTROS):
         """
         new_img = dis
         if len(tags) == 0:
+            # Means there's no tags present. Set the led to white.
             if self.current_led_pattern != 4:
                 self.emitter_service(self.color_pattern(4))
                 self.current_led_pattern = 4
             
         else:
             for tag in tags:
-                if tag.decision_margin < 20:
+                # The target margin need to be larger than this to get labelled.
+                detection_threshold = 20
+                if tag.decision_margin < detection_threshold:
                     continue
-                H = tag.homography # assume only 1 tag in image
-
-                # Find transformation from april tag to target image frame
-                P = self.projection_matrix(self.K, H)
                 
+                # Change led light according to the tag type.
                 self.change_led(tag.tag_id)
 
-                corners = tag.corners
+                # Draw bounding box/
+                new_img = self.draw_boundary(tag.corners, dis)
 
-                new_img = self.draw_boundary(corners, dis)
+                # Add text to the center of the box.
                 new_img = self.add_text_to_img(tag.tag_id, tag.center, new_img)
-                # Project model into image frame
-                #image_np = self.renderer.render(image_np, P)
         
         # make new CompressedImage to publish
         augmented_image_msg = CompressedImage()
@@ -281,7 +242,7 @@ class AprilTagNode(DTROS):
 
 
     def get_extrinsic_filepath(self,name):
-
+        #TODO: retrieve the calibration info from the right path.
         cali_file_folder = self.rospack.get_path('ex3_project')+'/config/calibrations/camera_extrinsic/'
 
         cali_file = cali_file_folder + name + ".yaml"
