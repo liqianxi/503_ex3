@@ -30,14 +30,14 @@ class LaneController:
             self.parameters['Kp_d'],
             self.parameters['Ki_d'],
             self.parameters['Kd_d'],
-            sample_time=self.parameters['sample_time']
+            sample_time=self.parameters['sample_time'],
             output_limits=self.parameters['d_bounds']
         )
         self.theta_pid_controller =  PID(
             self.parameters['Kp_theta'],
             self.parameters['Ki_theta'],
             self.parameters['Kd_theta'],
-            sample_time=self.parameters['sample_time']
+            sample_time=self.parameters['sample_time'],
             output_limits=self.parameters['theta_bounds']
         )
 
@@ -46,7 +46,4 @@ class LaneController:
         d_correct = self.d_pid_controller(d_err)
         phi_correct = self.theta_pid_controller(phi_err)
 
-        omega = (
-            
-        )
-
+        return 0.5 * d_correct + 0.5 * phi_correct
