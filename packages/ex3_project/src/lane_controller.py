@@ -45,8 +45,8 @@ class LaneController:
         """Main Function, computes the control action given the current errors"""
         d_correct = self.d_pid_controller(d_err)
         phi_correct = self.theta_pid_controller(phi_err)
-        
-        omega = (
 
+        omega = (
+            
         )
 
