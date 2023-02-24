@@ -8,13 +8,22 @@ from duckietown.dtros import DTROS, NodeType, TopicType, DTParam, ParamType
 from sensor_msgs.msg import CompressedImage, CameraInfo
 from augmented_reality_basics import Augmenter
 from cv_bridge import CvBridge
-from duckietown_utils import load_homography, load_map
+from duckietown_utils import load_homography, load_map,get_duckiefleet_root
 import rospkg 
 from dt_apriltags import Detector, Detection
 from duckietown_msgs.msg import Twist2DStamped, WheelEncoderStamped, WheelsCmdStamped,LEDPattern
 from duckietown_msgs.srv import SetCustomLEDPattern, ChangePattern
 # Code from https://github.com/Coral79/exA-3/blob/44adf94bad728507608086b91fbf5645fc22555f/packages/augmented_reality_basics/include/augmented_reality_basics/augmented_reality_basics.py
 # https://docs.photonvision.org/en/latest/docs/getting-started/pipeline-tuning/apriltag-tuning.html
+
+
+def argmin(lst):
+    tmp = lst.index(min(lst))
+
+    return tmp
+
+
+
 class AprilTagNode(DTROS):
 
     def __init__(self, node_name):
@@ -22,6 +31,7 @@ class AprilTagNode(DTROS):
         # Initialize the DTROS parent class
         super(AprilTagNode, self).__init__(node_name=node_name, node_type=NodeType.PERCEPTION)
         self.veh = "csc22945"
+
         self.rospack = rospkg.RosPack()
         #print(self.rospack.get_path('ex3_project'))
         self.read_params_from_calibration_file()
@@ -30,10 +40,10 @@ class AprilTagNode(DTROS):
 
         self.augmenter = Augmenter(self.homography,self.camera_info_msg)        
         # Subscribing 
-        self.sub_image = rospy.Subscriber( f'/{self.veh}/camera_node/image/compressed',CompressedImage,self.project, queue_size=1)
+        self.sub_image = rospy.Subscriber( f'/{self.veh}/camera_node/image/compressed',CompressedImage,self.project, queue_size=10)
         
         # Publisher
-        self.pub_result_ = rospy.Publisher(f'/{self.veh}/apriltag_node/modified/image/compressed', CompressedImage,queue_size=1)
+        self.pub_result_ = rospy.Publisher(f'/{self.veh}/apriltag_node/modified/image/compressed', CompressedImage,queue_size=10)
 
         # Keep this state so you don't need to reset the same color over and over again.
         self.current_led_pattern = 4
@@ -51,7 +61,7 @@ class AprilTagNode(DTROS):
         self.at_detector = Detector(searchpath=['apriltags'],
                            families='tag36h11',
                            nthreads=1,
-                           quad_decimate=0.7,
+                           quad_decimate=2,
                            quad_sigma=0.0,
                            refine_edges=1,
                            decode_sharpening=0.25,
@@ -131,7 +141,7 @@ class AprilTagNode(DTROS):
         thickness              = 1
         lineType               = 2
 
-
+        text = "Others"
         if tag_id in [63, 143, 58, 62, 133, 153]:
             # T-intersection
             text = "T-intersection"
@@ -162,7 +172,7 @@ class AprilTagNode(DTROS):
         self.raw_image = br.compressed_imgmsg_to_cv2(msg)
         # Convert to grey image and distort it.
         dis = self.augmenter.process_image(self.raw_image)
-        tags = self.at_detector.detect(dis, estimate_tag_pose=False, camera_params=self.camera_params, tag_size=0.065) # returns list of detection objects
+        tags = self.at_detector.detect(dis, estimate_tag_pose=True, camera_params=self.camera_params, tag_size=0.065) # returns list of detection objects
 
         """
         A tag obj looks like:
@@ -199,9 +209,50 @@ class AprilTagNode(DTROS):
             pose_t = None
             pose_err = None
             ]
+
+            Detection object:
+            tag_family = b'tag36h11'
+            tag_id = 162
+            hamming = 0
+            decision_margin = 40.54393005371094
+            homography = [[-7.80885439e+00 -8.66781223e+00  5.52224980e+02]
+            [-5.58210959e+00  1.12022310e+01  1.53705705e+02]
+            [-4.15111722e-02 -1.00903219e-02  1.00000000e+00]]
+            center = [552.22497979 153.70570474]
+            corners = [[534.56939697 165.29629517]
+            [564.89788818 167.99459839]
+            [571.02606201 141.3631134 ]
+            [540.79577637 140.81910706]]
+            pose_R = [[ 0.62178591 -0.10648683  0.77591419]
+            [ 0.21599374  0.97560771 -0.03919569]
+            [-0.75281404  0.19196393  0.62961962]]
+            pose_t = [[ 0.58169823]
+            [-0.15982501]
+            [ 0.75459753]]
+            pose_err = 2.231643479620302e-06
+
+
+            close:
+            [[ 0.00283237]
+            [-0.03544524]
+            [ 0.1758509 ]]
+
+
+            Far:
+            [[ 0.01155899]
+            [-0.06969869]
+            [ 0.28327815]]
+
+            Move to right:
+            [[-0.0800036 ]
+            [-0.05014226]
+            [ 0.23373001]]
+
                     
                     
         """
+        detection_threshold = 10 # The target margin need to be larger than this to get labelled.
+        z_threshold = 0.7 # in meters
         new_img = dis
         if len(tags) == 0:
             # Means there's no tags present. Set the led to white.
@@ -210,20 +261,31 @@ class AprilTagNode(DTROS):
                 self.current_led_pattern = 4
             
         else:
+            distance_list = []
+            tag_list = []
             for tag in tags:
-                # The target margin need to be larger than this to get labelled.
-                detection_threshold = 20
-                if tag.decision_margin < detection_threshold:
-                    continue
                 
+                
+                z = tag.pose_t[2][0]
+                #print(tag.tag_id, tag.decision_margin)
+                if tag.decision_margin < detection_threshold or z > z_threshold:
+                    continue
+                #print(tag.pose_t)
                 # Change led light according to the tag type.
-                self.change_led(tag.tag_id)
-
+                
+                distance_list.append(tag.pose_t[2][0])
+                tag_list.append(tag)
+            if len(distance_list) != 0:
+                #print(distance_list)
+                closest_tag_idx = argmin(distance_list)
+                #print("argmin",closest_tag_idx)
+                tag = tag_list[closest_tag_idx]
                 # Draw bounding box/
                 new_img = self.draw_boundary(tag.corners, dis)
 
                 # Add text to the center of the box.
                 new_img = self.add_text_to_img(tag.tag_id, tag.center, new_img)
+                self.change_led(tag.tag_id)
         
         # make new CompressedImage to publish
         augmented_image_msg = CompressedImage()
