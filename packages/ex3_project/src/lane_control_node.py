@@ -15,7 +15,7 @@ import typing
 from lane_controller import LaneController
 
 from duckietown.dtros import DTROS, NodeType, TopicType, DTParam, ParamType
-from duckietown_msgs.msg import Pose2DStamped, LanePose, WheelEncoderStamped, WheelsCmdStamped
+from duckietown_msgs.msg import Pose2DStamped, LanePose, WheelEncoderStamped, WheelsCmdStamped, Twist2DStamped
 from std_msgs.msg import Header, Float32, String, Float64MultiArray,Float32MultiArray
 
 import rosbag
@@ -52,7 +52,7 @@ class LaneControlNode(DTROS):
             "Kd_theta": 0.0,
             "sample_time": 0.01,
             "d_bounds": (-0.25,0.25),
-            "theta_bounds": (-0.4,0.4),
+            "theta_bounds": (-1.0,1.0),
         }
 
         self.forward_vel = 0.4
@@ -61,26 +61,25 @@ class LaneControlNode(DTROS):
 
         # Initialize variables
         self.pose_msg_dict = dict()
-        self.current_pose_source = "lane_filter"
         self.lane_pid_controller = LaneController(self.lane_controller_parameters)
+
         # Publishers
         ## Publish commands to the motors
         self.pub_motor_commands = rospy.Publisher(f'/{self.veh_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, queue_size=1)
+        self.pub_car_cmd = rospy.Publisher(f'/{self.veh_name}/kinematics_node/car_cmd', Twist2DStamped, queue_size=1, dt_topic_type=TopicType.CONTROL)
         
         # Subscribers
         ## Subscribe to the lane_pose node
-        self.sub_lane_reading = rospy.Subscriber(f"/{self.veh_name}/lane_filter_node/lane_pose", LanePose, self.cb_all_poses, "lane_filter", queue_size = 1)
+        self.sub_lane_reading = rospy.Subscriber(f"/{self.veh_name}/lane_filter_node/lane_pose", LanePose, self.cb_lane_pose, queue_size = 1)
 
         
         
         self.log("Initialized")
 
     # Start of callback functions
-    def cb_all_poses(self, input_pose_msg, pose_source):
-        if pose_source == self.current_pose_source:
-            self.pose_msg_dict[pose_source] = input_pose_msg
-            self.pose_msg = input_pose_msg
-            self.get_control_action(self.pose_msg)
+    def cb_lane_poses(self, input_pose_msg):
+        self.pose_msg = input_pose_msg
+        self.get_control_action(self.pose_msg)
 
 
     def get_control_action(self, pose_msg):
@@ -99,6 +98,20 @@ class LaneControlNode(DTROS):
         motor_cmd.vel_left = left_vel
         motor_cmd.vel_right = right_vel
         self.pub_motor_commands.publish(motor_cmd)
+
+        ## This could be better
+        """
+        # Initialize car control message
+        car_control_msg = Twist2DStamped()
+        car_control_msg.header = pose_msg.header
+
+        car_control_msg.v = v
+        car_control_msg.omega = omega
+
+        self.pub_car_cmd.publish(car_control_msg)
+
+
+        """
 
 
 
