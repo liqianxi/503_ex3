@@ -42,21 +42,18 @@ class LaneControlNode(DTROS):
             self.veh_name = "csc22935"
 
         # Static parameters
-        self.d_offset = 0 
+        self.d_offset = 0.0
         self.lane_controller_parameters = {
-            "Kp_d": 0.02,
-            "Ki_d": 0.01,
-            "Kd_d": 0.0,
-            "Kp_theta": 0.4,
-            "Ki_theta": 0.075,
-            "Kd_theta": 0.0,
+            "Kp_d": 10.0,
+            "Ki_d": 0.75,
+            "Kd_d": 0.25,
+            "Kp_theta": 5.0,
+            "Ki_theta": 0.25,
+            "Kd_theta": 0.125,
             "sample_time": 0.01,
-            "d_bounds": (-0.25,0.25),
-            "theta_bounds": (-1.0,1.0),
+            "d_bounds": (-2.0, 2.0),
+            "theta_bounds": (-2.0,2.0),
         }
-
-        self.forward_vel = 0.4
-        
 
 
         # Initialize variables
@@ -66,7 +63,7 @@ class LaneControlNode(DTROS):
         # Publishers
         ## Publish commands to the motors
         self.pub_motor_commands = rospy.Publisher(f'/{self.veh_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, queue_size=1)
-        self.pub_car_cmd = rospy.Publisher(f'/{self.veh_name}/kinematics_node/car_cmd', Twist2DStamped, queue_size=1, dt_topic_type=TopicType.CONTROL)
+        self.pub_car_cmd = rospy.Publisher(f'/{self.veh_name}/car_cmd_switch_node/cmd', Twist2DStamped, queue_size=1, dt_topic_type=TopicType.CONTROL)
         
         # Subscribers
         ## Subscribe to the lane_pose node
@@ -77,7 +74,7 @@ class LaneControlNode(DTROS):
         self.log("Initialized")
 
     # Start of callback functions
-    def cb_lane_poses(self, input_pose_msg):
+    def cb_lane_pose(self, input_pose_msg):
         self.pose_msg = input_pose_msg
         self.get_control_action(self.pose_msg)
 
@@ -89,29 +86,18 @@ class LaneControlNode(DTROS):
         d_err = pose_msg.d - self.d_offset
         phi_err = pose_msg.phi
 
-        correction = self.lane_pid_controller.compute_control_actions(d_err, phi_err, None)
- 
-        left_vel = self.forward_vel - correction
-        right_vel = self.forward_vel + correction 
-        motor_cmd = WheelsCmdStamped()
-        motor_cmd.header.stamp = rospy.Time.now()
-        motor_cmd.vel_left = left_vel
-        motor_cmd.vel_right = right_vel
-        self.pub_motor_commands.publish(motor_cmd)
+        v, omega = self.lane_pid_controller.compute_control_actions(d_err, phi_err, None)
 
-        ## This could be better
-        """
         # Initialize car control message
         car_control_msg = Twist2DStamped()
         car_control_msg.header = pose_msg.header
 
         car_control_msg.v = v
-        car_control_msg.omega = omega
-
+        car_control_msg.omega = omega * 2.5
+        print("omega:",omega)
         self.pub_car_cmd.publish(car_control_msg)
 
 
-        """
 
 
 
@@ -124,6 +110,11 @@ class LaneControlNode(DTROS):
             motor_cmd.vel_left = 0.0
             motor_cmd.vel_right = 0.0
             self.pub_motor_commands.publish(motor_cmd)
+            car_control_msg = Twist2DStamped()
+            car_control_msg.header.stamp = rospy.Time.now()
+            car_control_msg.v - 0.0
+            car_control_msg.omega = 0.0
+            self.pub_car_cmd.publish(car_control_msg)
 
 if __name__ == '__main__':
     node = LaneControlNode(node_name='lane_control_node')
