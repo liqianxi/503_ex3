@@ -11,8 +11,26 @@ from geometry_msgs.msg import Quaternion, Twist, Pose, Point, Vector3, Transform
 from duckietown.dtros import DTROS, NodeType
 from duckietown_msgs.msg import WheelEncoderStamped
 from tf2_ros import TransformBroadcaster
-
+from std_msgs.msg import Header, Float32, String, Float64MultiArray,Float32MultiArray
 from tf import transformations as tr
+
+
+# def handle_origin_shift(req):
+#         #     odom = Odometry()
+#         # odom.header.stamp = rospy.Time.now()  # Ideally, should be encoder time
+#         # odom.header.frame_id = self.origin_frame
+#         # odom.pose.pose = Pose(Point(self.x, self.y, self.z), Quaternion(*self.q))
+#         # odom.child_frame_id = self.target_frame
+#         # odom.twist.twist = Twist(Vector3(self.tv, 0.0, 0.0), Vector3(0.0, 0.0, self.rv))
+#     print("req",req)
+
+# def handle_shift():
+#     rospy.wait_for_service('change_odometry')
+#     try:
+#         func = rospy.ServiceProxy('change_odometry', Float32MultiArray)
+#         res = func([1.0,2.0,3.0])
+#     except rospy.ServiceException as e:
+#         print("Service call failed: %s"%e)
 
 
 class DeadReckoningNode(DTROS):
@@ -59,10 +77,13 @@ class DeadReckoningNode(DTROS):
 
         # Current pose, forward velocity, and angular rate
         self.timestamp = None
-        self.x = 0.0
-        self.y = 0.0
+        self.x = 0.48
+        self.y = 1.65
         self.z = 0.0
-        self.yaw = 0.0
+        self.yaw = 1.57
+
+
+        
         self.q = [0.0, 0.0, 0.0, 1.0]
         self.tv = 0.0
         self.rv = 0.0
@@ -95,7 +116,9 @@ class DeadReckoningNode(DTROS):
         self._print_every_sec = 30
         # tf broadcaster for odometry TF
         self._tf_broadcaster = TransformBroadcaster()
-
+        #self.service_change_odometry = rospy.Publisher(f'/{self.veh_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, queue_size=1)
+        #self.service_change_odometry = rospy.service("change_odometry",Float32MultiArray,handle_origin_shift)
+        #handle_shift()
         self.loginfo("Initialized")
 
     def cb_ts_encoders(self, left_encoder, right_encoder):

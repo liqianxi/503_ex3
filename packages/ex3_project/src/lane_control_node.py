@@ -40,7 +40,7 @@ class LaneControlNode(DTROS):
         if os.environ["VEHICLE_NAME"] is not None:
             self.veh_name = os.environ["VEHICLE_NAME"]
         else:
-            self.veh_name = "csc22935"
+            self.veh_name = "csc22945"
 
         # Get static parameters
         self.d_offset = 0.0
