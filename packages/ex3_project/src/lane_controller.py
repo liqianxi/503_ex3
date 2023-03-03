@@ -30,23 +30,33 @@ class LaneController:
             self.parameters['Kp_d'],
             self.parameters['Ki_d'],
             self.parameters['Kd_d'],
-            sample_time=self.parameters['sample_time']
+            sample_time=self.parameters['sample_time'],
             output_limits=self.parameters['d_bounds']
         )
         self.theta_pid_controller =  PID(
             self.parameters['Kp_theta'],
             self.parameters['Ki_theta'],
             self.parameters['Kd_theta'],
-            sample_time=self.parameters['sample_time']
+            sample_time=self.parameters['sample_time'],
             output_limits=self.parameters['theta_bounds']
         )
+        self.v_bar = 0.3
+
+    def reset_controller(self):
+        """This will reset both PID controllers"""
+        self.d_pid_controller.set_auto_mode(False)
+        self.d_pid_controller.set_auto_mode(True)
+        self.theta_pid_controller.set_auto_mode(False)
+        self.theta_pid_controller.set_auto_mode(True)
+
 
     def compute_control_actions(self, d_err, phi_err, wheels_cmd_exec):
         """Main Function, computes the control action given the current errors"""
         d_correct = self.d_pid_controller(d_err)
         phi_correct = self.theta_pid_controller(phi_err)
 
-        omega = (
-            
-        )
+        omega = d_correct + phi_correct
+        v = self.v_bar
 
+        return v, omega
+    

@@ -8,15 +8,15 @@ dt-launchfile-init
 # YOUR CODE BELOW THIS LINE
 # ----------------------------------------------------------------------------
 #dt-exec roslaunch augmented_reality_basics augmented_reality_basics.launch map_file:="intersection_4way.yaml" veh:=csc22945
-dt-exec roslaunch ex3_project ex3_project.launch veh:=csc22945
+dt-exec roslaunch led_emitter led_emitter_node.launch veh:=csc22935
+dt-exec roslaunch duckietown_demos deadreckoning.launch
+dt-exec roslaunch ex3_project ex3_project.launch veh:=csc22935
 
 
 # NOTE: Use the variable DT_REPO_PATH to know the absolute path to your code
 # NOTE: Use `dt-exec COMMAND` to run the main process (blocking process)
 
 # launching app
-dt-exec roslaunch led_emitter led_emitter_node.launch veh:=csc22945
-dt-exec roslaunch duckietown_demos deadreckoning.launch
 
 # ----------------------------------------------------------------------------
 # YOUR CODE ABOVE THIS LINE

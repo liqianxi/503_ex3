@@ -1,9 +1,9 @@
 <launch>
     <arg name="veh" doc="Name of vehicle. ex: megaman"/>
     <node pkg="ex3_project" type="apriltag_node.py" name="apriltag_node"  output="screen">
-
         <param name="veh" value="$(arg veh)" />
-
-
+    </node>
+    <node pkg="ex3_project" type="lane_control_node.py" name="lane_control_node"  output="screen">
+        <param name="veh" value="$(arg veh)" />
     </node>
 </launch>
