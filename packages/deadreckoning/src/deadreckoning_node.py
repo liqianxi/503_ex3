@@ -13,7 +13,7 @@ from duckietown_msgs.msg import WheelEncoderStamped
 from tf2_ros import TransformBroadcaster
 from std_msgs.msg import Header, Float32, String, Float64MultiArray,Float32MultiArray
 from tf import transformations as tr
-
+import tf2_ros
 
 # def handle_origin_shift(req):
 #         #     odom = Odometry()
@@ -116,6 +116,7 @@ class DeadReckoningNode(DTROS):
         self._print_every_sec = 30
         # tf broadcaster for odometry TF
         self._tf_broadcaster = TransformBroadcaster()
+
         #self.service_change_odometry = rospy.Publisher(f'/{self.veh_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, queue_size=1)
         #self.service_change_odometry = rospy.service("change_odometry",Float32MultiArray,handle_origin_shift)
         #handle_shift()

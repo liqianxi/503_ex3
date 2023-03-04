@@ -4,6 +4,7 @@ import rospy
 import cv2
 import yaml
 import numpy as np
+from nav_msgs.msg import Odometry
 from duckietown.dtros import DTROS, NodeType, TopicType, DTParam, ParamType
 from sensor_msgs.msg import CompressedImage, CameraInfo
 from augmented_reality_basics import Augmenter
@@ -15,6 +16,11 @@ from duckietown_msgs.msg import Twist2DStamped, WheelEncoderStamped, WheelsCmdSt
 from duckietown_msgs.srv import SetCustomLEDPattern, ChangePattern
 # Code from https://github.com/Coral79/exA-3/blob/44adf94bad728507608086b91fbf5645fc22555f/packages/augmented_reality_basics/include/augmented_reality_basics/augmented_reality_basics.py
 # https://docs.photonvision.org/en/latest/docs/getting-started/pipeline-tuning/apriltag-tuning.html
+import math
+import geometry_msgs.msg
+import tf
+
+import tf2_ros
 
 
 def argmin(lst):
@@ -37,10 +43,11 @@ class AprilTagNode(DTROS):
         self.read_params_from_calibration_file()
         # Get parameters from config
         self.camera_info_dict = self.load_intrinsics()
+        self.broadcaster = tf2_ros.StaticTransformBroadcaster()
 
         self.augmenter = Augmenter(self.homography,self.camera_info_msg)        
         # Subscribing 
-        self.sub_image = rospy.Subscriber( f'/{self.veh}/camera_node/image/compressed',CompressedImage,self.project, queue_size=10)
+        self.sub_image = rospy.Subscriber( f'/{self.veh}/camera_node/image/compressed',CompressedImage,self.project, queue_size=1)
         
         # Publisher
         self.pub_result_ = rospy.Publisher(f'/{self.veh}/apriltag_node/modified/image/compressed', CompressedImage,queue_size=10)
@@ -48,6 +55,9 @@ class AprilTagNode(DTROS):
         # Keep this state so you don't need to reset the same color over and over again.
         self.current_led_pattern = 4
 
+        self.frequency_control = 0
+        #self.sub_odom = rospy.Subscriber(f"/{self.veh}/odom", Odometry, self.get_odom_location, queue_size=1)
+        
         # extract parameters from camera_info_dict for apriltag detection
         f_x = self.camera_info_dict['camera_matrix']['data'][0]
         f_y = self.camera_info_dict['camera_matrix']['data'][4]
@@ -60,7 +70,7 @@ class AprilTagNode(DTROS):
         # initialise the apriltag detector
         self.at_detector = Detector(searchpath=['apriltags'],
                            families='tag36h11',
-                           nthreads=1,
+                           nthreads=4,
                            quad_decimate=2,
                            quad_sigma=0.0,
                            refine_edges=1,
@@ -71,6 +81,14 @@ class AprilTagNode(DTROS):
         rospy.wait_for_service(serve_name)
 
         self.emitter_service = rospy.ServiceProxy(serve_name, SetCustomLEDPattern,persistent=True)
+        self.r = rospy.Rate(30) # 30hz
+
+        #rospy.init_node('static_tf2_broadcaster_tag')
+        self.buffer = tf2_ros.Buffer()
+        
+    def get_odom_location(self,req):
+        print(req)
+
 
     def color_pattern(self,mode):
         msg = LEDPattern()
@@ -165,8 +183,35 @@ class AprilTagNode(DTROS):
 
         return img
 
+    def transform_camera_view(self,pose_t,pose_R):
+        static_transformStamped = geometry_msgs.msg.TransformStamped()
+
+        static_transformStamped.header.stamp = rospy.Time.now()
+        static_transformStamped.header.frame_id = "csc22945/camera_optical_frame"
+        static_transformStamped.child_frame_id = "csc22945/new_location"
+
+        static_transformStamped.transform.translation.x = float(pose_t[0][0])
+        static_transformStamped.transform.translation.y = float(pose_t[1][0])
+        static_transformStamped.transform.translation.z = float(pose_t[2][0])
+
+        
+        yaw = math.atan2(pose_R[1][0], pose_R[0][0])
+        pitch = math.atan2(-pose_R[2][0], math.sqrt(pose_R[2][1]**2+pose_R[2][2]**2))
+        roll = math.atan2(pose_R[2][1], pose_R[2][2])
+
+        quat = tf.transformations.quaternion_from_euler(roll,pitch,yaw)
+        static_transformStamped.transform.rotation.x = quat[0]
+        static_transformStamped.transform.rotation.y = quat[1]
+        static_transformStamped.transform.rotation.z = quat[2]
+        static_transformStamped.transform.rotation.w = quat[3]
+        #print(static_transformStamped)
+
+        self.broadcaster.sendTransform(static_transformStamped)
+
+
 
     def project(self, msg):
+        
         br = CvBridge()
         # Convert image to cv2 image.
         self.raw_image = br.compressed_imgmsg_to_cv2(msg)
@@ -232,28 +277,13 @@ class AprilTagNode(DTROS):
             pose_err = 2.231643479620302e-06
 
 
-            close:
-            [[ 0.00283237]
-            [-0.03544524]
-            [ 0.1758509 ]]
-
-
-            Far:
-            [[ 0.01155899]
-            [-0.06969869]
-            [ 0.28327815]]
-
-            Move to right:
-            [[-0.0800036 ]
-            [-0.05014226]
-            [ 0.23373001]]
-
                     
                     
         """
         detection_threshold = 10 # The target margin need to be larger than this to get labelled.
-        z_threshold = 0.7 # in meters
+        z_threshold = 1 # in meters
         new_img = dis
+
         if len(tags) == 0:
             # Means there's no tags present. Set the led to white.
             if self.current_led_pattern != 4:
@@ -265,7 +295,7 @@ class AprilTagNode(DTROS):
             tag_list = []
             for tag in tags:
                 
-                
+                #print(tag)
                 z = tag.pose_t[2][0]
                 #print(tag.tag_id, tag.decision_margin)
                 if tag.decision_margin < detection_threshold or z > z_threshold:
@@ -273,6 +303,8 @@ class AprilTagNode(DTROS):
                 #print(tag.pose_t)
                 # Change led light according to the tag type.
                 
+                
+                #self.buffer.lookup_transform("csc22945/","csc22945/camera_optical_frame",time=rospy.Time.now(),timeout=rospy.Duration(1.0))
                 distance_list.append(tag.pose_t[2][0])
                 tag_list.append(tag)
             if len(distance_list) != 0:
@@ -281,7 +313,9 @@ class AprilTagNode(DTROS):
                 #print("argmin",closest_tag_idx)
                 tag = tag_list[closest_tag_idx]
                 # Draw bounding box/
-                new_img = self.draw_boundary(tag.corners, dis)
+                self.transform_camera_view(tag.pose_t,tag.pose_R)
+                new_img = dis
+                #new_img = self.draw_boundary(tag.corners, new_img)
 
                 # Add text to the center of the box.
                 new_img = self.add_text_to_img(tag.tag_id, tag.center, new_img)
@@ -295,6 +329,7 @@ class AprilTagNode(DTROS):
         #render = self.augmenter.render_segments(points=self._points, img=dis, segments=self._segments)
         #result = br.cv2_to_compressed_imgmsg(render,dst_format='jpg')
         self.pub_result_.publish(augmented_image_msg)
+        self.r.sleep()
 
     def read_params_from_calibration_file(self):
         # Get static parameters
