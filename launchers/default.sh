@@ -11,7 +11,7 @@ dt-launchfile-init
 #dt-exec roslaunch ex3_project ex3_project.launch veh:=csc22945
 dt-exec roslaunch led_emitter led_emitter_node.launch veh:=csc22945
 dt-exec roslaunch duckietown_demos deadreckoning.launch
-#dt-exec roslaunch ex3_project ex3_project.launch veh:=csc22945
+dt-exec roslaunch ex3_project ex3_project.launch veh:=csc22945
 
 
 # NOTE: Use the variable DT_REPO_PATH to know the absolute path to your code
