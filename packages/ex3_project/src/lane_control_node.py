@@ -42,6 +42,8 @@ class LaneControlNode(DTROS):
             self.veh_name = "csc22945"
 
         # Static parameters
+        self.update_freq = 100.0
+        self.rate = rospy.Rate(self.update_freq)
         self.d_offset = 0.0
         self.lane_controller_parameters = {
             "Kp_d": 10.0,
@@ -50,7 +52,7 @@ class LaneControlNode(DTROS):
             "Kp_theta": 5.0,
             "Ki_theta": 0.25,
             "Kd_theta": 0.125,
-            "sample_time": 0.01,
+            "sample_time": 1.0 / self.update_freq,
             "d_bounds": (-2.0, 2.0),
             "theta_bounds": (-2.0,2.0),
         }
@@ -94,8 +96,8 @@ class LaneControlNode(DTROS):
 
         car_control_msg.v = v
         car_control_msg.omega = omega * 2.5
-        print("omega:",omega)
         self.pub_car_cmd.publish(car_control_msg)
+        self.rate.sleep()
 
 
 
