@@ -24,10 +24,7 @@ import tf2_ros
 
 
 def argmin(lst):
-    #print(lst)
-    tmp_min = min(lst)
-    #print("tmp_min",tmp_min)
-    tmp = lst.index(tmp_min)
+    tmp = lst.index(min(lst))
 
     return tmp
 
@@ -53,7 +50,7 @@ class AprilTagNode(DTROS):
         self.sub_image = rospy.Subscriber( f'/{self.veh}/camera_node/image/compressed',CompressedImage,self.project, queue_size=1)
         
         # Publisher
-        self.pub_result_ = rospy.Publisher(f'/{self.veh}/apriltag_node/modified/image/compressed', CompressedImage,queue_size=1)
+        self.pub_result_ = rospy.Publisher(f'/{self.veh}/apriltag_node/modified/image/compressed', CompressedImage,queue_size=10)
 
         # Keep this state so you don't need to reset the same color over and over again.
         self.current_led_pattern = 4
@@ -73,7 +70,7 @@ class AprilTagNode(DTROS):
         # initialise the apriltag detector
         self.at_detector = Detector(searchpath=['apriltags'],
                            families='tag36h11',
-                           nthreads=8,
+                           nthreads=4,
                            quad_decimate=2,
                            quad_sigma=0.0,
                            refine_edges=1,
@@ -84,10 +81,10 @@ class AprilTagNode(DTROS):
         rospy.wait_for_service(serve_name)
 
         self.emitter_service = rospy.ServiceProxy(serve_name, SetCustomLEDPattern,persistent=True)
-        #self.r = rospy.Rate(30) # 30hz
+        self.r = rospy.Rate(30) # 30hz
 
         #rospy.init_node('static_tf2_broadcaster_tag')
-        #self.buffer = tf2_ros.Buffer()
+        self.buffer = tf2_ros.Buffer()
         
     def get_odom_location(self,req):
         print(req)
@@ -332,7 +329,7 @@ class AprilTagNode(DTROS):
         #render = self.augmenter.render_segments(points=self._points, img=dis, segments=self._segments)
         #result = br.cv2_to_compressed_imgmsg(render,dst_format='jpg')
         self.pub_result_.publish(augmented_image_msg)
-        #self.r.sleep()
+        self.r.sleep()
 
     def read_params_from_calibration_file(self):
         # Get static parameters
