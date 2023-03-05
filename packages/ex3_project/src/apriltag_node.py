@@ -36,7 +36,10 @@ class AprilTagNode(DTROS):
 
         # Initialize the DTROS parent class
         super(AprilTagNode, self).__init__(node_name=node_name, node_type=NodeType.PERCEPTION)
-        self.veh = "csc22945"
+        if os.environ["VEHICLE_NAME"] is not None:
+            self.veh = os.environ["VEHICLE_NAME"]
+        else:
+            self.veh = "csc22945"
 
         self.rospack = rospkg.RosPack()
         #print(self.rospack.get_path('ex3_project'))
@@ -51,7 +54,6 @@ class AprilTagNode(DTROS):
         
         # Publisher
         self.pub_result_ = rospy.Publisher(f'/{self.veh}/apriltag_node/modified/image/compressed', CompressedImage,queue_size=10)
-
         # Keep this state so you don't need to reset the same color over and over again.
         self.current_led_pattern = 4
 
