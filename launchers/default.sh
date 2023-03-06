@@ -1,7 +1,7 @@
 #!/bin/bash
 
 source /environment.sh
-BOT=csc22935
+BOT=csc22945
 # initialize launch file
 dt-launchfile-init
 

@@ -77,10 +77,10 @@ class DeadReckoningNode(DTROS):
 
         # Current pose, forward velocity, and angular rate
         self.timestamp = None
-        self.x = 0.48
-        self.y = 1.65
+        self.x = 0.24#0.48
+        self.y = 0.24#1.65
         self.z = 0.0
-        self.yaw = 1.57
+        self.yaw = 0#1.57
 
 
         
@@ -117,10 +117,20 @@ class DeadReckoningNode(DTROS):
         # tf broadcaster for odometry TF
         self._tf_broadcaster = TransformBroadcaster()
 
-        #self.service_change_odometry = rospy.Publisher(f'/{self.veh_name}/wheels_driver_node/wheels_cmd', WheelsCmdStamped, queue_size=1)
-        #self.service_change_odometry = rospy.service("change_odometry",Float32MultiArray,handle_origin_shift)
+        self.service_change_odometry = rospy.Subscriber(f'/{self.veh}/change_odometry', Float32MultiArray, self.reset_odom,queue_size=1)
+        #self.service_change_odometry = rospy.service("change_odometry",Float32MultiArray,handle_shift)
         #handle_shift()
         self.loginfo("Initialized")
+
+    def reset_odom(self, req):
+        
+        data = req.data
+        #print(data)
+        self.x = data[0]
+        self.y = data[1]
+        self.z = data[2]
+        self.q = data[3:]
+        self.publish_odometry()
 
     def cb_ts_encoders(self, left_encoder, right_encoder):
         timestamp_now = rospy.get_time()
@@ -226,7 +236,7 @@ class DeadReckoningNode(DTROS):
         odom.pose.pose = Pose(Point(self.x, self.y, self.z), Quaternion(*self.q))
         odom.child_frame_id = self.target_frame
         odom.twist.twist = Twist(Vector3(self.tv, 0.0, 0.0), Vector3(0.0, 0.0, self.rv))
-
+        #handle_shift()
         self.pub.publish(odom)
 
         self._tf_broadcaster.sendTransform(

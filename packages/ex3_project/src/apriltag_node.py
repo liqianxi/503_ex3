@@ -19,7 +19,7 @@ from duckietown_msgs.srv import SetCustomLEDPattern, ChangePattern
 import math
 import geometry_msgs.msg
 import tf
-
+from std_msgs.msg import Header, Float32, String, Float64MultiArray,Float32MultiArray
 import tf2_ros
 
 
@@ -36,7 +36,7 @@ class AprilTagNode(DTROS):
 
         # Initialize the DTROS parent class
         super(AprilTagNode, self).__init__(node_name=node_name, node_type=NodeType.PERCEPTION)
-        self.veh = "csc22945"
+        self.veh = rospy.get_param("~veh")
 
         self.rospack = rospkg.RosPack()
         #print(self.rospack.get_path('ex3_project'))
@@ -44,8 +44,10 @@ class AprilTagNode(DTROS):
         # Get parameters from config
         self.camera_info_dict = self.load_intrinsics()
         self.broadcaster = tf2_ros.StaticTransformBroadcaster()
+        self.tmp_broadcaster = tf2_ros.StaticTransformBroadcaster()
 
-        self.augmenter = Augmenter(self.homography,self.camera_info_msg)        
+        self.augmenter = Augmenter(self.homography,self.camera_info_msg)    
+        self.pub_change_odometry = rospy.Publisher(f'/{self.veh}/change_odometry', Float32MultiArray, queue_size=10)    
         # Subscribing 
         self.sub_image = rospy.Subscriber( f'/{self.veh}/camera_node/image/compressed',CompressedImage,self.project, queue_size=1)
         
@@ -56,7 +58,7 @@ class AprilTagNode(DTROS):
         self.current_led_pattern = 4
 
         self.frequency_control = 0
-        #self.sub_odom = rospy.Subscriber(f"/{self.veh}/odom", Odometry, self.get_odom_location, queue_size=1)
+        self.sub_odom = rospy.Subscriber(f"/{self.veh}/deadreckoning_node/odom", Odometry, self.get_odom_location, queue_size=1)
         
         # extract parameters from camera_info_dict for apriltag detection
         f_x = self.camera_info_dict['camera_matrix']['data'][0]
@@ -85,9 +87,25 @@ class AprilTagNode(DTROS):
 
         #rospy.init_node('static_tf2_broadcaster_tag')
         self.buffer = tf2_ros.Buffer()
+
+        self.buffer_listener = tf2_ros.TransformListener(self.buffer)
         
+
+
+        self.fusion_x = 0
+        self.fusion_y = 0
+        self.fusion_z = 0
+
+        self.fusion_rotation_z = 0
+ 
+     
     def get_odom_location(self,req):
-        print(req)
+        data = req.pose.pose
+        self.fusion_x = data.position.x
+        self.fusion_y = data.position.y
+        self.fusion_z = data.position.z
+        self.fusion_rotation_z = data.orientation.z
+
 
 
     def color_pattern(self,mode):
@@ -187,8 +205,8 @@ class AprilTagNode(DTROS):
         static_transformStamped = geometry_msgs.msg.TransformStamped()
 
         static_transformStamped.header.stamp = rospy.Time.now()
-        static_transformStamped.header.frame_id = "csc22945/camera_optical_frame"
-        static_transformStamped.child_frame_id = "csc22945/new_location"
+        static_transformStamped.header.frame_id = f"{self.veh}/camera_optical_frame"
+        static_transformStamped.child_frame_id = f"{self.veh}/new_location"
 
         static_transformStamped.transform.translation.x = float(pose_t[0][0])
         static_transformStamped.transform.translation.y = float(pose_t[1][0])
@@ -200,6 +218,8 @@ class AprilTagNode(DTROS):
         roll = math.atan2(pose_R[2][1], pose_R[2][2])
 
         quat = tf.transformations.quaternion_from_euler(roll,pitch,yaw)
+
+        
         static_transformStamped.transform.rotation.x = quat[0]
         static_transformStamped.transform.rotation.y = quat[1]
         static_transformStamped.transform.rotation.z = quat[2]
@@ -208,119 +228,172 @@ class AprilTagNode(DTROS):
 
         self.broadcaster.sendTransform(static_transformStamped)
 
+    def combine_trans(self, april_frame, trans):
+
+        trans_x = trans.transform.translation.x
+        trans_y = trans.transform.translation.y
+        trans_z = trans.transform.translation.z
+        quat = trans.transform.rotation
+        #print(quat)
+        static_transformStamped = geometry_msgs.msg.TransformStamped()
+
+        static_transformStamped.header.stamp = rospy.Time.now()
+        static_transformStamped.header.frame_id = april_frame
+        static_transformStamped.child_frame_id = f"{self.veh}/calibrated_location"
+
+        static_transformStamped.transform.translation.x = trans_x
+        static_transformStamped.transform.translation.y = trans_y
+        static_transformStamped.transform.translation.z = trans_z
+
+        
+        static_transformStamped.transform.rotation.x = quat.x
+        static_transformStamped.transform.rotation.y = quat.y
+        static_transformStamped.transform.rotation.z = quat.z
+        static_transformStamped.transform.rotation.w = quat.w
+        #print(static_transformStamped)
+
+        self.tmp_broadcaster.sendTransform(static_transformStamped)
+
 
 
     def project(self, msg):
+
         
         br = CvBridge()
         # Convert image to cv2 image.
         self.raw_image = br.compressed_imgmsg_to_cv2(msg)
         # Convert to grey image and distort it.
         dis = self.augmenter.process_image(self.raw_image)
-        tags = self.at_detector.detect(dis, estimate_tag_pose=True, camera_params=self.camera_params, tag_size=0.065) # returns list of detection objects
-
-        """
-        A tag obj looks like:
-        [Detection object:
-            tag_family = b'tag36h11'
-            tag_id = 133
-            hamming = 0
-            decision_margin = 48.69158172607422
-            homography = [[ 2.27168755e+01  1.34799177e+01  4.11538806e+02]
-            [-5.57879559e+00  4.34456107e+01  1.75621770e+02]
-            [-3.39070666e-02  3.86488397e-02  1.00000000e+00]]
-            center = [411.53880649 175.6217704 ]
-            corners = [[375.08706665 209.4493866 ]
-            [445.62255859 212.48104858]
-            [453.69393921 136.50134277]
-            [377.13027954 138.41127014]]
-            pose_R = None
-            pose_t = None
-            pose_err = None
-            , Detection object:
-            tag_family = b'tag36h11'
-            tag_id = 153
-            hamming = 0
-            decision_margin = 55.499420166015625
-            homography = [[ 3.60020190e+01  1.26534920e+01  2.56767486e+02]
-            [-3.62088538e-01  4.18653617e+01  1.80028854e+02]
-            [ 5.39008255e-03  3.58126187e-02  1.00000000e+00]]
-            center = [256.7674857  180.02885442]
-            corners = [[226.52742004 215.69433594]
-            [293.33673096 212.76560974]
-            [288.90524292 142.12521362]
-            [217.05523682 144.47848511]]
-            pose_R = None
-            pose_t = None
-            pose_err = None
-            ]
-
-            Detection object:
-            tag_family = b'tag36h11'
-            tag_id = 162
-            hamming = 0
-            decision_margin = 40.54393005371094
-            homography = [[-7.80885439e+00 -8.66781223e+00  5.52224980e+02]
-            [-5.58210959e+00  1.12022310e+01  1.53705705e+02]
-            [-4.15111722e-02 -1.00903219e-02  1.00000000e+00]]
-            center = [552.22497979 153.70570474]
-            corners = [[534.56939697 165.29629517]
-            [564.89788818 167.99459839]
-            [571.02606201 141.3631134 ]
-            [540.79577637 140.81910706]]
-            pose_R = [[ 0.62178591 -0.10648683  0.77591419]
-            [ 0.21599374  0.97560771 -0.03919569]
-            [-0.75281404  0.19196393  0.62961962]]
-            pose_t = [[ 0.58169823]
-            [-0.15982501]
-            [ 0.75459753]]
-            pose_err = 2.231643479620302e-06
-
-
-                    
-                    
-        """
-        detection_threshold = 10 # The target margin need to be larger than this to get labelled.
-        z_threshold = 1 # in meters
         new_img = dis
+        if self.frequency_control % 10 == 0:
 
-        if len(tags) == 0:
-            # Means there's no tags present. Set the led to white.
-            if self.current_led_pattern != 4:
-                self.emitter_service(self.color_pattern(4))
-                self.current_led_pattern = 4
+            tags = self.at_detector.detect(dis, estimate_tag_pose=True, camera_params=self.camera_params, tag_size=0.065) # returns list of detection objects
+
             
-        else:
-            distance_list = []
-            tag_list = []
-            for tag in tags:
+            detection_threshold = 10 # The target margin need to be larger than this to get labelled.
+            z_threshold = 1 # in meters
+            
+            if len(tags) == 0:
+                # Means there's no tags present. Set the led to white.
+                if self.current_led_pattern != 4:
+                    self.emitter_service(self.color_pattern(4))
+                    self.current_led_pattern = 4
                 
-                #print(tag)
-                z = tag.pose_t[2][0]
-                #print(tag.tag_id, tag.decision_margin)
-                if tag.decision_margin < detection_threshold or z > z_threshold:
-                    continue
-                #print(tag.pose_t)
-                # Change led light according to the tag type.
-                
-                
-                #self.buffer.lookup_transform("csc22945/","csc22945/camera_optical_frame",time=rospy.Time.now(),timeout=rospy.Duration(1.0))
-                distance_list.append(tag.pose_t[2][0])
-                tag_list.append(tag)
-            if len(distance_list) != 0:
-                #print(distance_list)
-                closest_tag_idx = argmin(distance_list)
-                #print("argmin",closest_tag_idx)
-                tag = tag_list[closest_tag_idx]
-                # Draw bounding box/
-                self.transform_camera_view(tag.pose_t,tag.pose_R)
-                new_img = dis
-                #new_img = self.draw_boundary(tag.corners, new_img)
+            else:
+                distance_list = []
+                tag_list = []
 
-                # Add text to the center of the box.
-                new_img = self.add_text_to_img(tag.tag_id, tag.center, new_img)
-                self.change_led(tag.tag_id)
-        
+                for tag in tags:
+                    
+                    #print(tag)
+                    z = tag.pose_t[2][0]
+                    #print(tag.tag_id, tag.decision_margin)
+                    if tag.decision_margin < detection_threshold or z > z_threshold:
+                        continue
+                    #print(tag.pose_t)
+                    # Change led light according to the tag type.
+                    
+                    
+                    distance_list.append(tag.pose_t[2][0])
+                    tag_list.append(tag)
+
+                if len(distance_list) != 0:
+                    # If tag detected:
+                    closest_tag_idx = argmin(distance_list)
+                    #print("argmin",closest_tag_idx)
+                    tag = tag_list[closest_tag_idx]
+
+                    # Draw bounding box/
+                    self.transform_camera_view(tag.pose_t,tag.pose_R)
+                    # Now here you can get the ground truth location and yaw, use it to modify your odometry.
+                    tag_name = tag.tag_id
+                    frame_name = f"{tag_name}_static"
+                    #print(frame_name)
+                    """
+                    transform: 
+                        translation: 
+                            x: 0.17
+                            y: 2.84
+                            z: 0.085
+                        rotation: 
+                            x: -0.6530213399855402
+                            y: -0.27049023303646824
+                            z: 0.2707057174661928
+                            w: 0.6535415655384748
+                    """
+                    apriltag_trans = self.buffer.lookup_transform(f"{self.veh}/world",f"{frame_name}",time=rospy.Time.now(),timeout=rospy.Duration(1.0))
+                    #print(apriltag_trans)
+
+                    actual_x = apriltag_trans.transform.translation.x
+                    actual_y = apriltag_trans.transform.translation.y
+                    actual_z = apriltag_trans.transform.translation.z
+                    #actual_x = apriltag_trans.translation.x
+                    try:
+                        trans = self.buffer.lookup_transform(f"{self.veh}/new_location",f"{self.veh}/footprint",time=rospy.Time.now(),timeout=rospy.Duration(1.0))
+                        #print(trans)
+                        """
+                        transform: 
+                        translation: 
+                            x: -0.39698858166459905
+                            y: -1.2703165252412707
+                            z: 0.085
+                        rotation: 
+                            x: -0.49999982836333756
+                            y: 0.4996018497576509
+                            z: -0.49999985458938123
+                            w: 0.5003981502423488
+                        
+                        
+                        """
+                        self.combine_trans(frame_name, trans)
+                        # trans_x = trans.transform.translation.x
+                        # trans_y = trans.transform.translation.y
+                        # trans_z = trans.transform.translation.z
+                        # print("trans:",trans_x,trans_y,trans_z)
+
+                        # actual_x += trans_x
+                        # actual_y += trans_y
+                        # actual_z += trans_z
+
+
+                        final = self.buffer.lookup_transform(f"{self.veh}/world",f"{self.veh}/calibrated_location",time=rospy.Time.now(),timeout=rospy.Duration(1.0))
+                        #print(final)
+                    
+                        """
+                            x: 0.6669450351163856
+                            y: 3.4568548560895924
+                            z: 0.3497790815858113
+                        rotation: 
+                            x: -0.6659731145535472
+                            y: -0.2758550324796435
+                            z: -0.6401185037625119
+                            w: 0.265767027466437
+                        """
+                        trans = final.transform.translation
+                        rotation = final.transform.rotation
+                        new_array = Float32MultiArray()
+                        new_array.data = [trans.x,trans.y,trans.z,rotation.x,rotation.y, rotation.z,rotation.w]
+
+                        # self.fusion_x = actual_x
+                        # self.fusion_y = actual_y
+                        # self.fusion_z = actual_z
+                        # self.fusion_rotation_z = 1.57
+
+
+                        self.pub_change_odometry.publish(new_array)
+
+                        #print(distance_list)
+
+                        new_img = dis
+                        #new_img = self.draw_boundary(tag.corners, new_img)
+
+                        # Add text to the center of the box.
+                        new_img = self.add_text_to_img(tag.tag_id, tag.center, new_img)
+                        self.change_led(tag.tag_id)
+                    except Exception as e:
+                        print(e)
+
+        self.frequency_control +=1
         # make new CompressedImage to publish
         augmented_image_msg = CompressedImage()
         augmented_image_msg.header.stamp = rospy.Time.now()
