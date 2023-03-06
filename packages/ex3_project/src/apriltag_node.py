@@ -53,7 +53,6 @@ class AprilTagNode(DTROS):
         
         # Publisher
         self.pub_result_ = rospy.Publisher(f'/{self.veh}/apriltag_node/modified/image/compressed', CompressedImage,queue_size=10)
-
         # Keep this state so you don't need to reset the same color over and over again.
         self.current_led_pattern = 4
 
